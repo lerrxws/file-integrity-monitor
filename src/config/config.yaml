@@ -1,0 +1,15 @@
+monitor:
+  file: "./web/index.html"
+
+storage:
+  data_dir: "./data"
+
+database:
+  driver: "sqlite"
+  path: "./data/fim.db"
+
+logging:
+  path: "./data/fim.log"
+
+alert:
+  type: "console"
