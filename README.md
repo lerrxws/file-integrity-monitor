@@ -40,3 +40,31 @@ Edit the name and date in `web/index.html`:
 Keep the IDs unchanged. Edit `web/style.css` to change the appearance.
 Save your changes and refresh the browser; no server restart is needed.
 Date and name-day updates are manual for now.
+
+## Watch for file changes
+
+In another terminal, run from the project root:
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python src/main.py
+```
+
+Edit and save a file in `web/` to see a message. The watcher prints file creation,
+modification, deletion, and move events, including files in subdirectories.
+One save may produce several events. Stop the watcher with **Ctrl+C**.
+
+Startup, file events, and shutdown are logged to the terminal and `logs/fim.log`.
+Each entry includes the timestamp, timezone offset, level, and logger name.
+New entries are appended to the log file across runs.
+
+## Initialize the database
+
+After installing requirements, run from the project root:
+
+```bash
+PYTHONPATH=src .venv/bin/python -c "from db.setup import initialize_database; initialize_database('data/fim.db')"
+```
+
+This creates the `baselines` table with `path` and `sha256` columns and preserves
+existing records. Saving file hashes will be added later.

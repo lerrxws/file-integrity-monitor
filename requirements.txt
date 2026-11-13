@@ -1,0 +1,2 @@
+watchdog==7.1.0
+SQLAlchemy==2.1.8
