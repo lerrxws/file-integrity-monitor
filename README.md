@@ -58,16 +58,13 @@ Startup, file events, and shutdown are logged to the terminal and `logs/fim.log`
 Each entry includes the timestamp, timezone offset, level, and logger name.
 New entries are appended to the log file across runs.
 
-## Initialize the database
+## Baseline
 
-After installing requirements, run from the project root:
-
-```bash
-PYTHONPATH=src .venv/bin/python -c "from db.setup import initialize_database; initialize_database('data/fim.db')"
-```
-
-This creates the `baselines` table with `path` and `sha256` columns and preserves
-existing records. Saving file hashes will be added later.
+At startup, the app initializes `data/fim.db`. If no baseline records exist,
+it saves the paths and SHA-256 hashes of files in `web/`. The first startup
+assumes those files are trusted. Later startups preserve the existing baseline.
+Database or hashing errors stop startup. File changes are not compared with
+the baseline yet.
 
 ## Email notifications
 

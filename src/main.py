@@ -3,10 +3,14 @@ from pathlib import Path
 import smtplib
 
 from dotenv import load_dotenv
+from sqlalchemy.exc import SQLAlchemyError
 
+from db.setup import initialize_database
 from logger.setup import setup_logging
+from monitoring.baseline import create_baseline
 from monitoring.watcher import watch_directory
 from notifications.email import send_notification
+from repositories.baseline import baseline_exists
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +32,21 @@ def main() -> None:
         setup_logging(project_dir / "logs" / "fim.log")
     except OSError as exc:
         raise SystemExit(f"Cannot initialize logging: {exc}") from exc
-    watch_directory(project_dir / "web", on_change=handle_change)
+
+    website_dir = project_dir / "web"
+    database_path = project_dir / "data" / "fim.db"
+    try:
+        initialize_database(database_path)
+        if baseline_exists(database_path):
+            logger.info("Using existing baseline.")
+        else:
+            file_count = create_baseline(website_dir, database_path)
+            logger.info("Created baseline for %d files.", file_count)
+    except (OSError, ValueError, SQLAlchemyError) as exc:
+        logger.error("Cannot initialize baseline: %s", exc)
+        raise SystemExit("Cannot initialize baseline. Check the log for details.") from exc
+
+    watch_directory(website_dir, on_change=handle_change)
 
 
 if __name__ == "__main__":

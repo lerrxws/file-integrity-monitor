@@ -8,6 +8,15 @@ from db.baseline import Baseline
 from db.setup import initialize_database
 
 
+def baseline_exists(database_path: str | Path) -> bool:
+    engine = create_engine(URL.create("sqlite", database=str(database_path)))
+    try:
+        with Session(engine) as session:
+            return session.scalar(select(Baseline.path).limit(1)) is not None
+    finally:
+        engine.dispose()
+
+
 def save_baseline(database_path: str | Path, hashes: dict[str, str]) -> None:
     if not hashes:
         raise ValueError("Cannot create a baseline for an empty website.")
