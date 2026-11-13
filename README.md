@@ -65,8 +65,10 @@ it saves the paths and SHA-256 hashes of files in `web/`. The first startup
 assumes those files are trusted. Later startups preserve the existing baseline.
 Database or hashing errors stop startup. Created and modified files are compared
 with the saved hashes: matching content sends no email; added or changed files
-trigger alerts. The baseline stays unchanged. Deleted and moved files currently
-trigger event alerts without baseline comparison.
+trigger alerts. Deletions alert only for baseline paths. Moves check the old
+path as a deletion and compare the destination as an added or modified file;
+this can produce two alerts. Only paths inside `web/` are checked. The baseline
+stays unchanged.
 
 ## Email notifications
 

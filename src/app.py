@@ -42,20 +42,38 @@ def _prepare_baseline(website_dir: Path, engine: Engine) -> None:
 
 
 def handle_change(change: FileChange, website_dir: Path, engine: Engine) -> None:
-    change_type = change.event_type
-    if change.event_type in {"created", "modified"}:
-        try:
-            path = Path(change.src_path)
-            relative_path = path.resolve().relative_to(website_dir.resolve()).as_posix()
-            baseline_hash = get_baseline_hash(engine, relative_path)
+    if change.event_type == "moved":
+        _handle_move(change, website_dir, engine)
+        return
+    if change.event_type not in {"created", "modified", "deleted"}:
+        return
+
+    try:
+        path = Path(change.src_path)
+        relative_path = path.resolve().relative_to(website_dir.resolve()).as_posix()
+        baseline_hash = get_baseline_hash(engine, relative_path)
+        if change.event_type == "deleted":
+            difference = "deleted" if baseline_hash is not None else None
+        else:
             difference = compare_file(path, baseline_hash)
-        except (OSError, ValueError, SQLAlchemyError) as exc:
-            logger.error("Cannot check integrity for %r (%s).", change.src_path, type(exc).__name__)
-            return
+    except (OSError, ValueError, SQLAlchemyError) as exc:
+        logger.error("Cannot check integrity for %r (%s).", change.src_path, type(exc).__name__)
+        return
 
-        if difference is None:
-            logger.info("Unchanged from baseline: %r", change.src_path)
-            return
-        change_type = difference
+    if difference is None:
+        logger.info("No baseline difference for %r", change.src_path)
+        return
+    report_change(change, difference)
 
-    report_change(change, change_type)
+
+def _handle_move(change: FileChange, website_dir: Path, engine: Engine) -> None:
+    for event_type, path in (("deleted", change.src_path), ("created", change.dest_path)):
+        if not path:
+            continue
+        try:
+            inside_website = Path(path).resolve().is_relative_to(website_dir.resolve())
+        except (OSError, ValueError) as exc:
+            logger.error("Cannot check integrity for %r (%s).", path, type(exc).__name__)
+            continue
+        if inside_website:
+            handle_change(FileChange(event_type, path), website_dir, engine)
