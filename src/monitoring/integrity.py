@@ -1,6 +1,20 @@
 import hashlib
 from os import stat_result
 from pathlib import Path
+import stat
+from typing import Literal
+
+
+def compare_file(path: Path, baseline_hash: str | None) -> Literal["added", "modified"] | None:
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError(f"Expected a regular file: {path}")
+    current_hash = calculate_stable_sha256(path, metadata)
+    if baseline_hash is None:
+        return "added"
+    if current_hash != baseline_hash:
+        return "modified"
+    return None
 
 
 def calculate_sha256(path: str | Path) -> str:
@@ -25,5 +39,5 @@ def _file_state(metadata: stat_result) -> tuple[int, ...]:
 def calculate_stable_sha256(path: Path, initial_stat: stat_result) -> str:
     digest = calculate_sha256(path)
     if _file_state(initial_stat) != _file_state(path.lstat()):
-        raise ValueError(f"File changed while creating the baseline: {path}")
+        raise ValueError(f"File changed while calculating its hash: {path}")
     return digest

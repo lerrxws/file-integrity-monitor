@@ -63,8 +63,10 @@ New entries are appended to the log file across runs.
 At startup, the app initializes `data/fim.db`. If no baseline records exist,
 it saves the paths and SHA-256 hashes of files in `web/`. The first startup
 assumes those files are trusted. Later startups preserve the existing baseline.
-Database or hashing errors stop startup. File changes are not compared with
-the baseline yet.
+Database or hashing errors stop startup. Created and modified files are compared
+with the saved hashes: matching content sends no email; added or changed files
+trigger alerts. The baseline stays unchanged. Deleted and moved files currently
+trigger event alerts without baseline comparison.
 
 ## Email notifications
 
@@ -82,6 +84,23 @@ PYTHONPATH=src .venv/bin/python -c "from notifications.email import send_notific
 ```
 
 The app loads `.env` automatically at startup. Run `.venv/bin/python src/main.py`,
-then edit a file in `web/` to receive an email with the event type and file path.
+then change a file's content in `web/` to receive an email with the change type
+and file path.
 One save may produce multiple emails. Delivery failures are logged without
 stopping the watcher.
+
+## Code layout
+
+`main.py` loads settings, configures logging, and manages the database engine.
+`app.py` coordinates baseline setup, file checks, and notifications.
+`monitoring/` handles filesystem events and hashes; `repositories/` handles
+database queries. `db/`, `events/`, `notifications/`, and `logger/` keep their
+respective definitions and setup.
+
+## Tests
+
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+```
+
+Tests use temporary files and databases; they do not send real emails.

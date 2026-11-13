@@ -1,31 +1,35 @@
 from collections.abc import Callable
 import logging
+from os import fsdecode
 from pathlib import Path
 import time
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler, FileSystemMovedEvent
 from watchdog.observers import Observer
 
+from events.file_change import FileChange
+
 
 logger = logging.getLogger(__name__)
 
 
 class WebsiteChangeHandler(FileSystemEventHandler):
-    def __init__(self, on_change: Callable[[str], None]) -> None:
+    def __init__(self, on_change: Callable[[FileChange], None]) -> None:
         super().__init__()
         self.on_change = on_change
 
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory or event.event_type not in {"created", "modified", "deleted", "moved"}:
             return
-        message = f"{event.event_type.upper()}: {event.src_path!r}"
-        if isinstance(event, FileSystemMovedEvent):
-            message += f" -> {event.dest_path!r}"
-        logger.info(message)
-        self.on_change(message)
+        change = FileChange(
+            event_type=event.event_type,
+            src_path=fsdecode(event.src_path),
+            dest_path=fsdecode(event.dest_path) if isinstance(event, FileSystemMovedEvent) else None,
+        )
+        self.on_change(change)
 
 
-def watch_directory(website_dir: Path, on_change: Callable[[str], None]) -> None:
+def watch_directory(website_dir: Path, on_change: Callable[[FileChange], None]) -> None:
     if not website_dir.is_dir():
         raise SystemExit(f"Website directory not found: {website_dir}")
 

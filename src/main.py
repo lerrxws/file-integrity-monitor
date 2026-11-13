@@ -1,28 +1,15 @@
 import logging
 from pathlib import Path
-import smtplib
 
 from dotenv import load_dotenv
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import run
 from db.setup import initialize_database
 from logger.setup import setup_logging
-from monitoring.baseline import create_baseline
-from monitoring.watcher import watch_directory
-from notifications.email import send_notification
-from repositories.baseline import baseline_exists
 
 
 logger = logging.getLogger(__name__)
-
-
-def handle_change(message: str) -> None:
-    try:
-        send_notification("FIM: website file changed", message)
-    except (OSError, smtplib.SMTPException, ValueError) as exc:
-        logger.error("Email notification failed (%s). Check SMTP settings and connection.", type(exc).__name__)
-    else:
-        logger.info("Email notification accepted by SMTP server.")
 
 
 def main() -> None:
@@ -36,17 +23,15 @@ def main() -> None:
     website_dir = project_dir / "web"
     database_path = project_dir / "data" / "fim.db"
     try:
-        initialize_database(database_path)
-        if baseline_exists(database_path):
-            logger.info("Using existing baseline.")
-        else:
-            file_count = create_baseline(website_dir, database_path)
-            logger.info("Created baseline for %d files.", file_count)
+        engine = initialize_database(database_path)
     except (OSError, ValueError, SQLAlchemyError) as exc:
-        logger.error("Cannot initialize baseline: %s", exc)
-        raise SystemExit("Cannot initialize baseline. Check the log for details.") from exc
+        logger.error("Cannot initialize database: %s", exc)
+        raise SystemExit("Cannot initialize database. Check the log for details.") from exc
 
-    watch_directory(website_dir, on_change=handle_change)
+    try:
+        run(website_dir, engine)
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":
