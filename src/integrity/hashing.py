@@ -6,15 +6,19 @@ from typing import Literal
 
 
 def compare_file(path: Path, baseline_hash: str | None) -> Literal["added", "modified"] | None:
-    metadata = path.lstat()
-    if not stat.S_ISREG(metadata.st_mode):
-        raise ValueError(f"Expected a regular file: {path}")
-    current_hash = calculate_stable_sha256(path, metadata)
+    current_hash = calculate_file_hash(path)
     if baseline_hash is None:
         return "added"
     if current_hash != baseline_hash:
         return "modified"
     return None
+
+
+def calculate_file_hash(path: Path) -> str:
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError(f"Expected a regular file: {path}")
+    return calculate_stable_sha256(path, metadata)
 
 
 def calculate_sha256(path: str | Path) -> str:

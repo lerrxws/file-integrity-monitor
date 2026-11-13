@@ -1,7 +1,7 @@
 from pathlib import Path
 import stat
 
-from monitoring.integrity import calculate_stable_sha256
+from integrity.hashing import calculate_stable_sha256
 
 
 def collect_baseline(website_dir: str | Path) -> dict[str, str]:

@@ -8,7 +8,7 @@ A File Integrity Monitoring system for detecting unauthorized changes to files o
 - File integrity verification
 - Baseline storage
 - Logging
-- Incident detection
+- Change detection
 - Alerting
 - Daily update of `index.html`
 
@@ -72,7 +72,8 @@ trigger event alerts without baseline comparison.
 
 Use an SMTP server supporting STARTTLS, normally on port 587.
 Copy `.env.example` to `.env`, fill in your settings, and run `chmod 600 .env`.
-The `.env` file is ignored by Git and must be loaded into your shell explicitly.
+The app loads `.env` automatically. The standalone sender test below loads it
+into your shell explicitly. `.env` is ignored by Git.
 
 To load the settings and send a test email:
 
@@ -92,15 +93,8 @@ stopping the watcher.
 ## Code layout
 
 `main.py` loads settings, configures logging, and manages the database engine.
-`app.py` coordinates baseline setup, file checks, and notifications.
-`monitoring/` handles filesystem events and hashes; `repositories/` handles
-database queries. `db/`, `events/`, `notifications/`, and `logger/` keep their
-respective definitions and setup.
-
-## Tests
-
-```bash
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-```
-
-Tests use temporary files and databases; they do not send real emails.
+`app.py` coordinates baseline setup, comparison, and alerts.
+`watching/` detects filesystem events; `integrity/` collects and compares hashes.
+`notifications/alerts.py` formats and logs alerts and handles delivery failures;
+`notifications/email.py` sends email. `repositories/` handles database queries,
+`db/` defines the database, `events/` holds file event data, and `logger/` configures logging.
