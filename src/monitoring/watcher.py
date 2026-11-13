@@ -1,9 +1,12 @@
 import logging
 from pathlib import Path
+import smtplib
 import time
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler, FileSystemMovedEvent
 from watchdog.observers import Observer
+
+from notifications import email
 
 
 logger = logging.getLogger(__name__)
@@ -17,6 +20,12 @@ class WebsiteChangeHandler(FileSystemEventHandler):
         if isinstance(event, FileSystemMovedEvent):
             message += f" -> {event.dest_path!r}"
         logger.info(message)
+        try:
+            email.send_notification("FIM: website file changed", message)
+        except (OSError, smtplib.SMTPException, ValueError) as exc:
+            logger.error("Email notification failed (%s). Check SMTP settings and connection.", type(exc).__name__)
+        else:
+            logger.info("Email notification accepted by SMTP server.")
 
 
 def watch_directory(website_dir: Path) -> None:

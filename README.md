@@ -68,3 +68,23 @@ PYTHONPATH=src .venv/bin/python -c "from db.setup import initialize_database; in
 
 This creates the `baselines` table with `path` and `sha256` columns and preserves
 existing records. Saving file hashes will be added later.
+
+## Email notifications
+
+Use an SMTP server supporting STARTTLS, normally on port 587.
+Copy `.env.example` to `.env`, fill in your settings, and run `chmod 600 .env`.
+The `.env` file is ignored by Git and must be loaded into your shell explicitly.
+
+To load the settings and send a test email:
+
+```bash
+set -a
+source .env
+set +a
+PYTHONPATH=src .venv/bin/python -c "from notifications.email import send_notification; send_notification('FIM test', 'This is a test notification.')"
+```
+
+The app loads `.env` automatically at startup. Run `.venv/bin/python src/main.py`,
+then edit a file in `web/` to receive an email with the event type and file path.
+One save may produce multiple emails. Delivery failures are logged without
+stopping the watcher.
