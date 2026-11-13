@@ -1,18 +1,20 @@
+from collections.abc import Callable
 import logging
 from pathlib import Path
-import smtplib
 import time
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler, FileSystemMovedEvent
 from watchdog.observers import Observer
-
-from notifications import email
 
 
 logger = logging.getLogger(__name__)
 
 
 class WebsiteChangeHandler(FileSystemEventHandler):
+    def __init__(self, on_change: Callable[[str], None]) -> None:
+        super().__init__()
+        self.on_change = on_change
+
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory or event.event_type not in {"created", "modified", "deleted", "moved"}:
             return
@@ -20,20 +22,15 @@ class WebsiteChangeHandler(FileSystemEventHandler):
         if isinstance(event, FileSystemMovedEvent):
             message += f" -> {event.dest_path!r}"
         logger.info(message)
-        try:
-            email.send_notification("FIM: website file changed", message)
-        except (OSError, smtplib.SMTPException, ValueError) as exc:
-            logger.error("Email notification failed (%s). Check SMTP settings and connection.", type(exc).__name__)
-        else:
-            logger.info("Email notification accepted by SMTP server.")
+        self.on_change(message)
 
 
-def watch_directory(website_dir: Path) -> None:
+def watch_directory(website_dir: Path, on_change: Callable[[str], None]) -> None:
     if not website_dir.is_dir():
         raise SystemExit(f"Website directory not found: {website_dir}")
 
     observer = Observer()
-    observer.schedule(WebsiteChangeHandler(), str(website_dir), recursive=True)
+    observer.schedule(WebsiteChangeHandler(on_change), str(website_dir), recursive=True)
     observer.start()
     logger.info("Watching %s. Press Ctrl+C to stop.", website_dir)
     try:
