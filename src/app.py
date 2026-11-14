@@ -9,7 +9,7 @@ from events.file_change import FileChange
 from integrity.baseline import collect_baseline
 from integrity.hashing import compare_file
 from notifications.alerts import report_change
-from repositories.baseline import baseline_exists, get_baseline_hash, save_baseline
+from repositories.baseline import baseline_exists, get_baseline_hash, get_baseline_hashes, save_baseline
 from watching.watcher import watch_directory
 
 
@@ -34,11 +34,30 @@ def _prepare_baseline(website_dir: Path, engine: Engine) -> None:
 
     if baseline_exists(engine):
         logger.info("Using existing baseline.")
+        _scan_website(website_dir, engine)
         return
 
     hashes = collect_baseline(website_dir)
     save_baseline(engine, hashes)
     logger.info("Created baseline for %d files.", len(hashes))
+
+
+def _scan_website(website_dir: Path, engine: Engine) -> None:
+    baseline = get_baseline_hashes(engine)
+    current = collect_baseline(website_dir)
+    differences = 0
+    for path in sorted(baseline.keys() | current.keys()):
+        if path not in baseline:
+            change_type = "added"
+        elif path not in current:
+            change_type = "deleted"
+        elif baseline[path] != current[path]:
+            change_type = "modified"
+        else:
+            continue
+        report_change(FileChange(change_type, str(website_dir / path)), change_type)
+        differences += 1
+    logger.info("Startup scan completed: %d differences.", differences)
 
 
 def handle_change(change: FileChange, website_dir: Path, engine: Engine) -> None:

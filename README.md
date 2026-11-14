@@ -62,7 +62,9 @@ New entries are appended to the log file across runs.
 
 At startup, the app initializes `data/fim.db`. If no baseline records exist,
 it saves the paths and SHA-256 hashes of files in `web/`. The first startup
-assumes those files are trusted. Later startups preserve the existing baseline.
+assumes those files are trusted. Later startups scan the website against the saved
+baseline before watching, alerting about added, modified, or missing files.
+Differences are reported on each startup until the files match the baseline.
 Database or hashing errors stop startup. Created and modified files are compared
 with the saved hashes: matching content sends no email; added or changed files
 trigger alerts. Deletions alert only for baseline paths. Moves check the old

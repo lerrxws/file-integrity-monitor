@@ -15,6 +15,11 @@ def get_baseline_hash(engine: Engine, path: str) -> str | None:
         return session.scalar(select(Baseline.sha256).where(Baseline.path == path))
 
 
+def get_baseline_hashes(engine: Engine) -> dict[str, str]:
+    with Session(engine) as session:
+        return dict(session.execute(select(Baseline.path, Baseline.sha256)).all())
+
+
 def save_baseline(engine: Engine, hashes: dict[str, str]) -> None:
     if not hashes:
         raise ValueError("Cannot create a baseline for an empty website.")
