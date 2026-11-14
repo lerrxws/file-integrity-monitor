@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-import json
 import math
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
+
+from helpers.files import read_json_file
 
 
 @dataclass(frozen=True)
@@ -38,8 +39,7 @@ def _positive_number(value: object, name: str) -> float:
 
 
 def load_config(path: Path, project_dir: Path) -> PublisherConfig:
-    with path.open(encoding="utf-8") as file:
-        settings = json.load(file)
+    settings = read_json_file(path)
 
     paths = {}
 

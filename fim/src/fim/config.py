@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from email.errors import HeaderParseError
 from email.headerregistry import Address
-import json
 import math
 import os
 from pathlib import Path
 
+from helpers.files import read_json_file, relative_file_path
+
 from .incidents import HashMismatchIncidentRule, IncidentRule, PublisherAwareIncidentRule
-from .incidents.publisher_aware import relative_file_path
 
 
 DEFAULT_SMTP_PORT = 587
@@ -148,8 +148,7 @@ def _load_incident_rule(
 
 
 def load_config(path: Path, project_dir: Path) -> AppConfig:
-    with path.open(encoding="utf-8") as file:
-        settings = json.load(file)
+    settings = read_json_file(path)
 
     paths = {}
 

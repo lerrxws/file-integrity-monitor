@@ -7,6 +7,8 @@ from string import Template
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from helpers.files import read_text_file
+
 from .config import NameDayApiConfig
 from .publication import publish_page
 
@@ -53,7 +55,7 @@ def update_index(
     if path.is_symlink():
         raise ValueError("Cannot update a symlinked index.html.")
 
-    content = Template(template_path.read_text(encoding="utf-8")).substitute(
+    content = Template(read_text_file(template_path)).substitute(
         name_day=escape(name_day) if name_day is not None else "—",
         current_date=today.isoformat(),
         status_hidden="hidden" if name_day is not None else "",

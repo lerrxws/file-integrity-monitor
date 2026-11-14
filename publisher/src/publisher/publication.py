@@ -9,23 +9,10 @@ from pathlib import Path
 import stat
 from tempfile import NamedTemporaryFile
 
+from helpers.files import read_existing_bytes
+
 
 FILE_MODE = 0o644
-
-
-def _existing_bytes(path: Path) -> bytes | None:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        return None
-
-    if not stat.S_ISREG(metadata.st_mode):
-        raise ValueError(f"Expected a regular file, not a symlink or special file: {path}")
-
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-
-    with os.fdopen(descriptor, "rb") as source:
-        return source.read()
 
 
 def _stage_bytes(directory: Path, content: bytes) -> Path:
@@ -99,7 +86,7 @@ def publish_page(
     staging_dir: Path,
     manifest_path: Path | None = None,
 ) -> bool:
-    if manifest_path is None and _existing_bytes(target) == content:
+    if manifest_path is None and read_existing_bytes(target) == content:
         return False
 
     website_dir = target.parent.resolve()
@@ -120,13 +107,13 @@ def publish_page(
 
     try:
         with publication_lock(manifest_path):
-            changed = _existing_bytes(target) != content
+            changed = read_existing_bytes(target) != content
 
             if manifest_path is not None:
                 approval = {"version": 1, "files": {target.name: hashlib.sha256(content).hexdigest()}}
                 manifest = (json.dumps(approval, indent=2) + "\n").encode("utf-8")
 
-                if _existing_bytes(manifest_path) != manifest:
+                if read_existing_bytes(manifest_path) != manifest:
                     staged_manifest = _stage_bytes(manifest_path.parent, manifest)
 
                     try:

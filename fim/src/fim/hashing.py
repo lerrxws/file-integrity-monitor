@@ -5,6 +5,8 @@ from os import stat_result
 from pathlib import Path
 import stat
 
+from helpers.files import open_regular_file
+
 
 HASH_CHUNK_SIZE = 1024 * 1024
 
@@ -30,9 +32,7 @@ def observe_file(path: Path) -> FileObservation:
 
     digest = hashlib.sha256()
 
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-
-    with os.fdopen(descriptor, "rb") as file:
+    with open_regular_file(path) as file:
         if _file_state(before) != _file_state(os.fstat(file.fileno())):
             raise ValueError("File changed before calculating its hash.")
 

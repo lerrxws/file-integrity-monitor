@@ -11,6 +11,7 @@ RUN groupadd --gid 10001 publisher \
 COPY src ./src
 COPY config/config.json ./config/config.json
 COPY templates ./templates
+COPY helpers ./helpers
 
 USER publisher
 

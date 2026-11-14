@@ -9,6 +9,8 @@ Three components have separate source directories and Docker build contexts:
 - **`web/`** owns the public files and the Nginx image that serves them in Docker.
 
 One root `compose.yaml` starts the components together.
+File-reading helpers live in separate `fim/helpers/` and `publisher/helpers/`
+directories, outside each component's source package.
 
 ## Setup
 
@@ -360,6 +362,8 @@ compose.yaml                 # shared deployment
 .env.example                 # root SMTP and web binding settings
 fim/
   Dockerfile
+  helpers/
+    files.py                 # file readers and relative-path validation
   requirements.txt           # FIM dependencies
   config/config.json         # FIM settings
   data/                      # local SQLite baseline, ignored by Git
@@ -381,6 +385,8 @@ fim/
       notifications.py       # recipient delivery state, retries, and SMTP alerts
 publisher/
   Dockerfile
+  helpers/
+    files.py                 # JSON, template, and existing-content readers
   config/config.json         # Publisher settings
   templates/index.html       # source HTML
   src/
@@ -416,7 +422,7 @@ commands below so it does not overwrite your manual edit before FIM scans it.
    rendering and approval code. This leaves the original baseline unchanged:
 
 ```bash
-PYTHONPATH=publisher/src .venv/bin/python - <<'PY'
+PYTHONPATH=publisher:publisher/src .venv/bin/python - <<'PY'
 from datetime import date
 from pathlib import Path
 from publisher.config import load_config

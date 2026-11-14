@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY src ./src
 COPY config/config.json ./config/config.json
+COPY helpers ./helpers
 
 USER fim
 
