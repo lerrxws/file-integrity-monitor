@@ -6,6 +6,8 @@ import math
 import os
 from pathlib import Path
 
+from .incidents import AnyChangeRule, HashMismatchRule, IncidentRule
+
 
 DEFAULT_SMTP_PORT = 587
 
@@ -24,6 +26,7 @@ class AppConfig:
     scan_interval: float
     smtp_timeout: float
     notifications: NotificationConfig
+    incident_rule: IncidentRule = field(default_factory=AnyChangeRule)
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,29 @@ def _load_notifications(settings: object) -> NotificationConfig:
     return NotificationConfig(group=group, recipients=recipients_by_group[group])
 
 
+def _load_incident_rule(settings: object) -> IncidentRule:
+    if not isinstance(settings, dict):
+        raise ValueError("incident_rule must be an object.")
+
+    if set(settings) != {"type"}:
+        raise ValueError("incident_rule must contain only a type field.")
+
+    rule_type = settings["type"]
+
+    if not isinstance(rule_type, str):
+        raise ValueError("incident_rule.type must be a rule name.")
+
+    rule_factories = {
+        "any_change": AnyChangeRule,
+        "hash_mismatch": HashMismatchRule,
+    }
+
+    if rule_type not in rule_factories:
+        raise ValueError(f"Unknown incident_rule.type: {rule_type!r}.")
+
+    return rule_factories[rule_type]()
+
+
 def load_config(path: Path, project_dir: Path) -> AppConfig:
     with path.open(encoding="utf-8") as file:
         settings = json.load(file)
@@ -122,6 +148,7 @@ def load_config(path: Path, project_dir: Path) -> AppConfig:
         scan_interval=_positive_number(settings["scan_interval"], "scan_interval"),
         smtp_timeout=_positive_number(settings["smtp_timeout"], "smtp_timeout"),
         notifications=_load_notifications(settings["notifications"]),
+        incident_rule=_load_incident_rule(settings.get("incident_rule", {"type": "any_change"})),
     )
 
 

@@ -4,6 +4,9 @@
   "log_file": "logs/fim.log",
   "scan_interval": 5,
   "smtp_timeout": 10,
+  "incident_rule": {
+    "type": "any_change"
+  },
   "notifications": {
     "group": "web_admin",
     "groups": {

@@ -40,6 +40,9 @@ FIM uses `fim/config/config.json`:
   "log_file": "logs/fim.log",
   "scan_interval": 5,
   "smtp_timeout": 10,
+  "incident_rule": {
+    "type": "any_change"
+  },
   "notifications": {
     "group": "web_admin",
     "groups": {
@@ -64,34 +67,46 @@ All selected recipients receive a new alert when the file content changes again.
 
 The scanner returns file differences without handling email or recipients.
 The notifier owns the selected group's delivery state, retries, and recovery;
-the application loop assesses differences through a change policy before passing
-incidents to it.
+the application loop passes differences and the selected rule to `find_incidents`
+before passing incidents to the notifier.
 
-## Change policies
+## Change rules
 
-`fim/src/fim/policy.py` defines the authorization boundary:
+`fim/src/fim/incidents.py` defines one interface: `IncidentRule.matches(context) -> bool`.
+`ChangeContext` contains the observed path and difference and its expected hash
+from the original baseline. Rules read these facts without sending email or
+writing the database. The same module's `find_incidents` function applies the
+selected rule, collects incidents, and handles unverifiable files and rule errors.
+`app.py` loads or creates the baseline through a private helper and coordinates
+scanning, incident selection, notification, and the pause between scans.
 
-- `ChangePolicy` is a `Protocol` with `assess(path, difference)`.
-- `ChangeAssessment` is an immutable result containing `decision` and `reason`.
-- `ChangeDecision` contains `APPROVED` and `INCIDENT`.
-- `ReportAllChangesPolicy` is wired into the CLI and keeps every difference
-  reportable because trusted approval evidence is not configured yet.
+`incident_rule` in `fim/config/config.json` selects the rule. The default is
+`{"type": "any_change"}`, which reports every detected addition, modification,
+deletion, or unverifiable path. Omitting `incident_rule`
+uses the same default. Unchanged files produce no incident.
 
-Policies classify observed paths, operations, and hashes. They do not send email
-or write the database. The application records approved versions and logs the
-approval reason; the notifier handles incident delivery and retries.
+To select the hash comparison rule, replace `incident_rule` with:
 
-Approved versions are stored separately in SQLite's `approved_versions` table.
-The original `baselines` rows stay unchanged. Only the approved path becomes a
-new expected state, so a later rollback to the original content is detected.
-Approved deletions also persist without losing the original baseline's initialized
-status. Existing databases receive the additional table at startup.
+```json
+{
+  "incident_rule": {
+    "type": "hash_mismatch"
+  }
+}
+```
 
-Unverifiable paths always remain incidents. Policy failures or failure to store
-an approval leave the previous expected state intact and keep the change reportable.
-Publisher changes continue to alert with the default policy. `PublisherChangePolicy`
-and `AuthorizedUserChangePolicy` will be added when their trusted evidence
-mechanisms are defined; there is no automatic approval based on time or file ownership.
+Only `any_change` and `hash_mismatch` are supported. The loader creates the selected
+rule object at startup. `hash_mismatch` compares observed and expected hashes,
+including additions and deletions. Since the scanner already filters unchanged
+files, both rules currently report the same file differences.
+
+Unknown types or fields and malformed rules stop startup with an error.
+Restart FIM after changing the configuration. Unverifiable paths and rule
+evaluation failures always remain incidents.
+
+Monitoring never updates the stored baseline after initialization. A non-match
+only suppresses the incident. Existing extra database tables are ignored and
+preserved. Publisher changes continue to alert.
 
 Publisher uses `publisher/config/config.json`:
 
@@ -151,8 +166,8 @@ An existing SQLite baseline is always retained.
 ## Monitoring behavior
 
 - First startup saves hashes of the current public files. Initial content is
-  assumed trusted. Later startups load the baseline plus approved versions and
-  scan immediately against that expected state.
+  assumed trusted. Later startups load the original baseline and scan immediately
+  against it.
 - Scans detect added, modified, deleted, and unverifiable files, including
   subdirectories. Renames appear as a deletion and an addition.
 - Successful alerts are deduplicated in memory by path, change type, hash, and
@@ -162,8 +177,8 @@ An existing SQLite baseline is always retained.
 - Logs append to the configured file and also appear in the terminal.
 - FIM needs website read access and database/log write access. Publisher needs
   write access to the public and staging directories and read access to its template.
-- Publisher changes still produce integrity alerts with the current policy.
-  Publisher never modifies the baseline or the approved-version records.
+- Publisher changes still produce integrity alerts with the default rules.
+  Publisher never modifies the baseline.
 
 Polling can miss changes reverted between scans. Files replaced while FIM is
 offline cannot always be reconstructed later. Scanning and SMTP delivery take
@@ -305,17 +320,17 @@ fim/
   config/config.json         # FIM settings
   data/                      # local SQLite baseline, ignored by Git
   logs/                      # local FIM logs, ignored by Git
-  tests/                     # monitoring and notification group checks
+  tests/                     # rule configuration, baseline, and alert retry checks
   src/
     main.py                  # FIM entry point
     fim/
       __main__.py            # CLI, logging, resource lifecycle
-      config.py              # FIM and SMTP settings
-      app.py                 # scan loop and baseline initialization
+      config.py              # FIM and SMTP settings, rule parsing and validation
+      app.py                 # monitoring loop and baseline setup helper
       monitor.py             # file differences and ChangeType enum
-      policy.py              # assessment contract and default incident policy
+      incidents.py           # IncidentRule, rule objects, and incident selection
       hashing.py             # SHA-256 snapshots
-      storage.py             # original baseline and approved expected versions
+      storage.py             # SQLite baseline initialization and storage
       notifications.py       # recipient delivery state, retries, and SMTP alerts
 publisher/
   Dockerfile
@@ -334,7 +349,7 @@ web/
   .staging/                  # temporary files, ignored by Git
 ```
 
-Run the policy, storage, and notification integration checks with:
+Run the configuration, rule, storage, and notification integration checks with:
 
 ```bash
 .venv/bin/python -m unittest discover -s fim/tests -v

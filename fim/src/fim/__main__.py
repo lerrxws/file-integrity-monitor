@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from .app import run
 from .config import load_config, load_smtp_settings
 from .notifications import Notifier
-from .policy import ReportAllChangesPolicy
 from .storage import initialize_database
 
 
@@ -50,7 +49,7 @@ def main() -> None:
 
         connection = initialize_database(settings.database_path)
 
-        run(settings, connection, notifier.notify, policy=ReportAllChangesPolicy())
+        run(settings, connection, notifier.notify)
 
     except KeyboardInterrupt:
         logger.info("Stopped monitoring.")
