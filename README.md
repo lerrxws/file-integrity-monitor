@@ -24,6 +24,8 @@ chmod 600 .env
 
 Fill in SMTP settings in the root `.env`. FIM loads this shared file and validates
 its settings at startup. Existing environment variables take precedence.
+Recipient addresses belong in FIM's notification groups, configured below.
+The previous `SMTP_TO` variable is no longer used; move its address into a group.
 Publisher uses only the Python standard library and does not read `.env` or
 require SMTP credentials.
 
@@ -37,9 +39,32 @@ FIM uses `fim/config/config.json`:
   "database_path": "data/fim.db",
   "log_file": "logs/fim.log",
   "scan_interval": 5,
-  "smtp_timeout": 10
+  "smtp_timeout": 10,
+  "notifications": {
+    "group": "web_admin",
+    "groups": {
+      "web_admin": [
+        "admin@example.com",
+        "backup@example.com"
+      ]
+    }
+  }
 }
 ```
+
+`notifications.group` selects the group that receives every integrity alert.
+Add groups under `notifications.groups` and replace the example addresses with
+your actual contacts. Each group must contain at least one bare email address.
+Groups and addresses are validated at startup; duplicate addresses within a group
+are removed. Restart FIM after changing the selection or addresses.
+
+Each recipient gets an individual email. Delivery state is tracked per recipient,
+so a failure for one address does not resend the same alert to successful recipients.
+All selected recipients receive a new alert when the file content changes again.
+
+The scanner returns file differences without handling email or recipients.
+The notifier owns the selected group's delivery state, retries, and recovery;
+the application loop passes each scan result to it.
 
 Publisher uses `publisher/config/config.json`:
 
@@ -102,9 +127,10 @@ An existing SQLite baseline is always retained.
   assumed trusted. Later startups load that baseline and scan immediately.
 - Scans detect added, modified, deleted, and unverifiable files, including
   subdirectories. Renames appear as a deletion and an addition.
-- Successful alerts are deduplicated in memory by path, change type, and hash.
-  Returning to the baseline clears that path's state. Restarting can resend
-  unresolved alerts. Failed emails are retried on the next scan.
+- Successful alerts are deduplicated in memory by path, change type, hash, and
+  recipient. Returning to the baseline clears that path's state for everyone.
+  Restarting can resend unresolved alerts. Failed recipients are retried on the
+  next scan while other group members continue to receive their alerts.
 - Logs append to the configured file and also appear in the terminal.
 - FIM needs website read access and database/log write access. Publisher needs
   write access to the public and staging directories and read access to its template.
@@ -251,16 +277,17 @@ fim/
   config/config.json         # FIM settings
   data/                      # local SQLite baseline, ignored by Git
   logs/                      # local FIM logs, ignored by Git
+  tests/                     # monitoring and notification group checks
   src/
     main.py                  # FIM entry point
     fim/
       __main__.py            # CLI, logging, resource lifecycle
       config.py              # FIM and SMTP settings
       app.py                 # scan loop and baseline initialization
-      monitor.py             # comparison and ChangeType enum
+      monitor.py             # file differences and ChangeType enum
       hashing.py             # SHA-256 snapshots
       storage.py             # SQLite baseline storage
-      notifications.py       # SMTP alerts
+      notifications.py       # recipient delivery state, retries, and SMTP alerts
 publisher/
   Dockerfile
   config/config.json         # Publisher settings
@@ -277,3 +304,11 @@ web/
   public/                    # published and monitored files
   .staging/                  # temporary files, ignored by Git
 ```
+
+Run the monitoring and notification group checks with:
+
+```bash
+.venv/bin/python -m unittest discover -s fim/tests -v
+```
+
+These checks use temporary files and mocked SMTP; they send no real emails.

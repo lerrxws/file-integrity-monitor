@@ -3,5 +3,13 @@
   "database_path": "data/fim.db",
   "log_file": "logs/fim.log",
   "scan_interval": 5,
-  "smtp_timeout": 10
+  "smtp_timeout": 10,
+  "notifications": {
+    "group": "web_admin",
+    "groups": {
+      "web_admin": [
+        ""
+      ]
+    }
+  }
 }

@@ -1,12 +1,8 @@
-from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
-import logging
 from pathlib import Path
 
 from .hashing import collect_hashes
-
-
-logger = logging.getLogger(__name__)
 
 
 class ChangeType(str, Enum):
@@ -16,34 +12,34 @@ class ChangeType(str, Enum):
     UNVERIFIABLE = "unverifiable"
 
 
+@dataclass(frozen=True)
+class FileDifference:
+    change_type: ChangeType
+    sha256: str | None = None
+    error: str | None = None
+
+
 def scan_directory(
     website_dir: Path,
     baseline: dict[str, str],
-    reported: dict[str, tuple[ChangeType, str | None]],
-    report_change: Callable[[str, ChangeType], bool],
-) -> None:
+) -> dict[Path, FileDifference]:
     current, errors = collect_hashes(website_dir)
+    differences = {}
 
-    for path in sorted(baseline.keys() | current.keys() | errors.keys() | reported.keys()):
+    for path in sorted(baseline.keys() | current.keys() | errors.keys()):
         if path in errors:
-            difference = (ChangeType.UNVERIFIABLE, errors[path])
+            difference = FileDifference(ChangeType.UNVERIFIABLE, error=errors[path])
         elif any(error == "." or path.startswith(error + "/") for error in errors):
             continue
         elif path not in current:
-            difference = (ChangeType.DELETED, None) if path in baseline else None
+            difference = FileDifference(ChangeType.DELETED)
         elif path not in baseline:
-            difference = (ChangeType.ADDED, current[path])
+            difference = FileDifference(ChangeType.ADDED, sha256=current[path])
         elif current[path] != baseline[path]:
-            difference = (ChangeType.MODIFIED, current[path])
+            difference = FileDifference(ChangeType.MODIFIED, sha256=current[path])
         else:
-            difference = None
+            continue
 
-        if difference is None:
-            if reported.pop(path, None) is not None:
-                logger.info("Recovered: %r", path)
-        elif reported.get(path) != difference:
-            if path in errors:
-                logger.error("Cannot verify %r: %s", path, errors[path])
+        differences[website_dir / path] = difference
 
-            if report_change(str(website_dir / path), difference[0]):
-                reported[path] = difference
+    return differences
