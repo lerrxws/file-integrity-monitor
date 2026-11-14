@@ -6,8 +6,9 @@ import time
 
 from .config import AppConfig
 from .hashing import collect_hashes
-from .incidents import find_incidents
-from .monitor import FileDifference, scan_directory
+from .incidents import ChangeType, FileDifference
+from .locking import scan_lock
+from .monitor import scan_directory
 from .storage import get_baseline, save_baseline
 
 
@@ -20,7 +21,9 @@ def run(
     notify: Callable[[dict[Path, FileDifference]], None],
 ) -> None:
     website_dir = settings.website_dir
-    baseline = _load_or_create_baseline(website_dir, connection)
+
+    with scan_lock(settings.scan_lock_path):
+        baseline = _load_or_create_baseline(website_dir, connection)
 
     logger.info(
         "Monitoring %s every %s seconds. Press Ctrl+C to stop.",
@@ -28,11 +31,25 @@ def run(
     )
 
     while True:
-        differences = scan_directory(website_dir, baseline)
-        incidents = find_incidents(
-            website_dir, baseline, differences, settings.incident_rule,
-        )
+        try:
+            with scan_lock(settings.scan_lock_path):
+                scan = scan_directory(website_dir)
+                incidents = settings.incident_rule.evaluate(scan, baseline)
+
+                if not isinstance(incidents, dict) or any(
+                    not isinstance(path, Path) or not isinstance(incident, FileDifference)
+                    for path, incident in incidents.items()
+                ):
+                    raise TypeError("IncidentRule.evaluate must return path-to-incident results.")
+        except Exception as exc:
+            logger.error("Cannot evaluate integrity scan (%s).", type(exc).__name__)
+
+            incidents = {
+                website_dir: FileDifference(ChangeType.UNVERIFIABLE, error=f"Scan failed: {type(exc).__name__}: {exc}"),
+            }
+
         notify(incidents)
+
         time.sleep(settings.scan_interval)
 
 

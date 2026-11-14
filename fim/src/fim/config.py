@@ -6,7 +6,8 @@ import math
 import os
 from pathlib import Path
 
-from .incidents import AnyChangeRule, HashMismatchRule, IncidentRule
+from .incidents import HashMismatchIncidentRule, IncidentRule, PublisherAwareIncidentRule
+from .incidents.publisher_aware import relative_file_path
 
 
 DEFAULT_SMTP_PORT = 587
@@ -26,7 +27,8 @@ class AppConfig:
     scan_interval: float
     smtp_timeout: float
     notifications: NotificationConfig
-    incident_rule: IncidentRule = field(default_factory=AnyChangeRule)
+    incident_rule: IncidentRule = field(default_factory=HashMismatchIncidentRule)
+    scan_lock_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -99,27 +101,50 @@ def _load_notifications(settings: object) -> NotificationConfig:
     return NotificationConfig(group=group, recipients=recipients_by_group[group])
 
 
-def _load_incident_rule(settings: object) -> IncidentRule:
+def _load_incident_rule(
+    settings: object, project_dir: Path, website_dir: Path, lock_path: Path | None,
+) -> IncidentRule:
     if not isinstance(settings, dict):
         raise ValueError("incident_rule must be an object.")
 
-    if set(settings) != {"type"}:
-        raise ValueError("incident_rule must contain only a type field.")
-
-    rule_type = settings["type"]
+    rule_type = settings.get("type")
 
     if not isinstance(rule_type, str):
         raise ValueError("incident_rule.type must be a rule name.")
 
-    rule_factories = {
-        "any_change": AnyChangeRule,
-        "hash_mismatch": HashMismatchRule,
-    }
+    if rule_type in {"any_change", "hash_mismatch"}:
+        if set(settings) != {"type"}:
+            raise ValueError("Baseline incident rules must contain only a type field.")
 
-    if rule_type not in rule_factories:
+        return HashMismatchIncidentRule()
+
+    if rule_type != "publisher_aware":
         raise ValueError(f"Unknown incident_rule.type: {rule_type!r}.")
 
-    return rule_factories[rule_type]()
+    if set(settings) != {"type", "paths", "manifest_path"}:
+        raise ValueError("publisher_aware requires only paths and manifest_path.")
+
+    paths = settings["paths"]
+
+    if not isinstance(paths, list) or not paths:
+        raise ValueError("publisher_aware.paths must be a nonempty list.")
+
+    value = settings["manifest_path"]
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("publisher_aware.manifest_path must be a nonempty path.")
+
+    manifest = Path(os.path.abspath(project_dir / value))
+
+    if manifest.resolve().is_relative_to(website_dir.resolve()) or manifest.suffix == ".lock":
+        raise ValueError("Publisher manifest must be outside website_dir and differ from its lock.")
+
+    if lock_path is None or lock_path.resolve() != manifest.with_suffix(".lock").resolve():
+        raise ValueError("publisher_aware requires scan_lock_path to match the manifest's .lock file.")
+
+    return PublisherAwareIncidentRule(
+        manifest, tuple(dict.fromkeys(relative_file_path(path) for path in paths)),
+    )
 
 
 def load_config(path: Path, project_dir: Path) -> AppConfig:
@@ -143,12 +168,31 @@ def load_config(path: Path, project_dir: Path) -> AppConfig:
         if paths[key].resolve().is_relative_to(website_dir.resolve()):
             raise ValueError(f"{key} must be outside website_dir.")
 
+    lock_path = None
+
+    if settings.get("scan_lock_path") is not None:
+        value = settings["scan_lock_path"]
+
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("scan_lock_path must be a nonempty path or null.")
+
+        lock_path = Path(os.path.abspath(project_dir / value))
+
+        if lock_path.resolve().is_relative_to(website_dir.resolve()):
+            raise ValueError("scan_lock_path must be outside website_dir.")
+
+        if lock_path.resolve() in {paths["database_path"].resolve(), paths["log_file"].resolve()}:
+            raise ValueError("Scan lock must not overlap the database or log file.")
+
     return AppConfig(
         **paths,
         scan_interval=_positive_number(settings["scan_interval"], "scan_interval"),
         smtp_timeout=_positive_number(settings["smtp_timeout"], "smtp_timeout"),
         notifications=_load_notifications(settings["notifications"]),
-        incident_rule=_load_incident_rule(settings.get("incident_rule", {"type": "any_change"})),
+        incident_rule=_load_incident_rule(
+            settings.get("incident_rule", {"type": "hash_mismatch"}), project_dir, website_dir, lock_path,
+        ),
+        scan_lock_path=lock_path,
     )
 
 

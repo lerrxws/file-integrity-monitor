@@ -18,7 +18,8 @@ def publish(settings: PublisherConfig, today: date) -> bool:
         name_day = None
 
     changed = update_index(
-        settings.website_dir, today, name_day, settings.template_path, settings.staging_dir
+        settings.website_dir, today, name_day, settings.template_path, settings.staging_dir,
+        manifest_path=settings.manifest_path,
     )
 
     if changed:

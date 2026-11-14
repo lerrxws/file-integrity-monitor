@@ -7,7 +7,7 @@ import smtplib
 import ssl
 
 from .config import NotificationConfig, SmtpConfig
-from .monitor import ChangeType, FileDifference
+from .incidents import ChangeType, FileDifference
 
 
 ALERT_SUBJECT = "FIM: website file changed"

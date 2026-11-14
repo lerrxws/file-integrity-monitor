@@ -4,16 +4,15 @@ import json
 from pathlib import Path
 import stat
 from string import Template
-from tempfile import NamedTemporaryFile
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .config import NameDayApiConfig
+from .publication import publish_page
 
 
 HTTP_USER_AGENT = "WebsitePublisher/1.0"
 INDEX_FILENAME = "index.html"
-PAGE_FILE_MODE = 0o644
 
 
 def fetch_name_day(today: date, settings: NameDayApiConfig) -> str:
@@ -44,6 +43,7 @@ def update_index(
     name_day: str | None,
     template_path: Path,
     staging_dir: Path,
+    manifest_path: Path | None = None,
 ) -> bool:
     if not stat.S_ISDIR(website_dir.lstat().st_mode):
         raise ValueError("The website path must be a directory, not a symlink.")
@@ -59,25 +59,11 @@ def update_index(
         status_hidden="hidden" if name_day is not None else "",
     )
 
-    if path.exists() and path.read_text(encoding="utf-8") == content:
-        return False
-
-    if staging_dir.resolve().is_relative_to(website_dir.resolve()):
-        raise ValueError("staging_dir must be outside website_dir.")
-
-    temporary = NamedTemporaryFile(mode="w", encoding="utf-8", dir=staging_dir, delete=False)
-    temporary_path = Path(temporary.name)
-
-    try:
-        with temporary:
-            temporary.write(content)
-
-        temporary_path.chmod(PAGE_FILE_MODE)
-        temporary_path.replace(path)
-    finally:
-        temporary_path.unlink(missing_ok=True)
-
-    return True
+    if manifest_path is not None and template_path.resolve() in {
+        manifest_path.resolve(), manifest_path.with_suffix(".lock").resolve(),
+    }:
+        raise ValueError("manifest_path and its lock must not replace the template.")
+    return publish_page(path, content.encode("utf-8"), staging_dir, manifest_path)
 
 
 def seconds_until_midnight(now: datetime) -> float:

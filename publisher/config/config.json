@@ -1,6 +1,7 @@
 {
   "website_dir": "../web/public",
   "staging_dir": "../web/.staging",
+  "manifest_path": "../web/.publisher/manifest.json",
   "template_path": "templates/index.html",
   "timezone": "Europe/Bratislava",
   "retry_interval": 5,

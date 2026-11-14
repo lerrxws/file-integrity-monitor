@@ -49,6 +49,13 @@ services:
           nocopy: true
           subpath: public
       - baseline:/app/fim/data
+      - type: volume
+        source: website
+        target: /app/web/.publisher
+        read_only: true
+        volume:
+          nocopy: true
+          subpath: .publisher
       - logs:/app/fim/logs
       - ./fim/config/config.json:/app/fim/config/config.json:ro
 

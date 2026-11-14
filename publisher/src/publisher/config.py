@@ -22,6 +22,7 @@ class PublisherConfig:
     timezone: ZoneInfo
     retry_interval: float
     name_day_api: NameDayApiConfig
+    manifest_path: Path | None = None
 
 
 def _positive_number(value: object, name: str) -> float:
@@ -70,6 +71,36 @@ def load_config(path: Path, project_dir: Path) -> PublisherConfig:
     if staging_dir.stat().st_dev != website_dir.stat().st_dev:
         raise ValueError("staging_dir and website_dir must share a filesystem for atomic publishing.")
 
+    manifest_path = None
+
+    if settings.get("manifest_path") is not None:
+        value = settings["manifest_path"]
+
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("manifest_path must be a nonempty path or null.")
+
+        manifest_path = Path(os.path.abspath(project_dir / value))
+
+        if manifest_path == manifest_path.with_suffix(".lock"):
+            raise ValueError("manifest_path must differ from its .lock path.")
+
+        if manifest_path.resolve() in {website_dir.resolve(), staging_dir.resolve()}:
+            raise ValueError("manifest_path must be a file outside website_dir and staging_dir.")
+
+        if any(
+            manifest_path.parent.resolve().is_relative_to(directory.resolve())
+            for directory in (website_dir, staging_dir)
+        ):
+            raise ValueError("manifest_path must be outside website_dir and staging_dir.")
+
+        if paths["template_path"].resolve() in {
+            manifest_path.resolve(), manifest_path.with_suffix(".lock").resolve(),
+        }:
+            raise ValueError("manifest_path and its lock must not replace the template.")
+
+        if manifest_path.parent.is_symlink():
+            raise ValueError("The manifest directory must not be a symlink.")
+
     api = settings["name_day_api"]
     url = api["url"]
 
@@ -100,4 +131,5 @@ def load_config(path: Path, project_dir: Path) -> PublisherConfig:
             country=country.lower(),
             timeout=_positive_number(api["timeout"], "name_day_api.timeout"),
         ),
+        manifest_path=manifest_path,
     )

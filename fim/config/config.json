@@ -4,8 +4,11 @@
   "log_file": "logs/fim.log",
   "scan_interval": 5,
   "smtp_timeout": 10,
+  "scan_lock_path": "../web/.publisher/manifest.lock",
   "incident_rule": {
-    "type": "any_change"
+    "type": "publisher_aware",
+    "paths": ["index.html"],
+    "manifest_path": "../web/.publisher/manifest.json"
   },
   "notifications": {
     "group": "web_admin",
