@@ -1,0 +1,14 @@
+{
+  "website_dir": "web",
+  "database_path": "data/fim.db",
+  "log_file": "logs/fim.log",
+  "template_path": "templates/index.html",
+  "scan_interval": 5,
+  "timezone": "Europe/Bratislava",
+  "name_day_api": {
+    "url": "https://nameday.abalin.net/api/V2/date",
+    "country": "sk",
+    "timeout": 5
+  },
+  "smtp_timeout": 10
+}

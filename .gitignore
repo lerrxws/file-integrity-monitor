@@ -6,7 +6,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
-/config/config.json
 /data/*
 !/data/.gitkeep
 /logs/*
