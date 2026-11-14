@@ -5,7 +5,7 @@ import math
 import os
 from pathlib import Path
 
-from helpers.files import read_json_file, relative_file_path
+from fim.src.helpers.files import read_json_file, relative_file_path
 
 from .incidents import HashMismatchIncidentRule, IncidentRule, PublisherAwareIncidentRule
 

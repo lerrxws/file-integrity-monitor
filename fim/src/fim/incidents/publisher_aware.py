@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-from helpers.files import read_json_file, relative_file_path
+from fim.src.helpers.files import read_json_file, relative_file_path
 
 from ..monitor import ScanResult
 from .base import ChangeType, FileDifference, IncidentRule

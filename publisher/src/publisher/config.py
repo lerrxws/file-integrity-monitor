@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from helpers.files import read_json_file
+from publisher.src.helpers.files import read_json_file
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,7 @@ from pathlib import Path
 import stat
 from tempfile import NamedTemporaryFile
 
-from helpers.files import read_existing_bytes
+from publisher.src.helpers.files import read_existing_bytes
 
 
 FILE_MODE = 0o644

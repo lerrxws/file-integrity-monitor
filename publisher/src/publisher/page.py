@@ -7,7 +7,7 @@ from string import Template
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from helpers.files import read_text_file
+from publisher.src.helpers.files import read_text_file
 
 from .config import NameDayApiConfig
 from .publication import publish_page

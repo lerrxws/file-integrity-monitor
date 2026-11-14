@@ -3,7 +3,7 @@ import fcntl
 from pathlib import Path
 import stat
 
-from helpers.files import open_regular_file
+from fim.src.helpers.files import open_regular_file
 
 
 @contextmanager

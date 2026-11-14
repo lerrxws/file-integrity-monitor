@@ -5,7 +5,7 @@ from os import stat_result
 from pathlib import Path
 import stat
 
-from helpers.files import open_regular_file
+from fim.src.helpers.files import open_regular_file
 
 
 HASH_CHUNK_SIZE = 1024 * 1024
