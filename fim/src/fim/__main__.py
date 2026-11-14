@@ -44,7 +44,7 @@ def main() -> None:
         settings = load_config(args.config, PROJECT_DIR)
         setup_logging(settings.log_file)
 
-        load_dotenv(PROJECT_DIR / ".env")
+        load_dotenv(PROJECT_DIR.parent / ".env")
         smtp = load_smtp_settings(settings.smtp_timeout)
 
         connection = initialize_database(settings.database_path)

@@ -1,158 +1,279 @@
 # File Integrity Monitor
 
-A small Python program that monitors website files against SHA-256 hashes stored
-in SQLite. It reads configuration at startup, writes a log file, and sends email
-alerts. It also generates today's date and Slovak name day in `web/index.html`.
+Three components have separate source directories and Docker build contexts:
+
+- **`fim/`** reads website files, compares SHA-256 hashes with a SQLite baseline,
+  writes logs, and sends email alerts. It never changes the website.
+- **`publisher/`** fetches the name day and generates `index.html` on startup and
+  at local midnight. It has no baseline database or SMTP dependency.
+- **`web/`** owns the public files and the Nginx image that serves them in Docker.
+
+One root `compose.yaml` starts the components together.
 
 ## Setup
 
-Requires Python 3.10 or newer and an SMTP account supporting STARTTLS.
-
-Run from the project root:
+Requires Python 3.10 or newer. FIM needs an SMTP account supporting STARTTLS.
+Run the following commands from the repository root.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r fim/requirements.txt
 cp .env.example .env
 chmod 600 .env
 ```
 
-Fill in the SMTP settings in `.env`. They are validated once at startup.
-The file is ignored by Git. Existing environment variables take precedence.
+Fill in SMTP settings in the root `.env`. FIM loads this shared file and validates
+its settings at startup. Existing environment variables take precedence.
+Publisher uses only the Python standard library and does not read `.env` or
+require SMTP credentials.
 
-Edit `config/config.json` to configure the monitor:
+## Configuration
+
+FIM uses `fim/config/config.json`:
 
 ```json
 {
-  "website_dir": "web",
+  "website_dir": "../web/public",
   "database_path": "data/fim.db",
   "log_file": "logs/fim.log",
-  "template_path": "templates/index.html",
   "scan_interval": 5,
-  "timezone": "Europe/Bratislava",
-  "name_day_api": {
-    "url": "https://nameday.abalin.net/api/V2/date",
-    "country": "sk",
-    "timeout": 5
-  },
   "smtp_timeout": 10
 }
 ```
 
-Paths in this file are relative to the project root; absolute paths also work.
-The database, log, and source template must be outside the monitored directory.
-The scan interval and network timeouts must be positive numbers of seconds.
-SMTP connection settings and credentials stay in `.env`; `SMTP_PORT` defaults
-to 587 when omitted. JSON settings and environment values are validated once
-and passed to application code as immutable typed configuration objects.
+Publisher uses `publisher/config/config.json`:
 
-## Run
-
-Start the monitor:
-
-```bash
-.venv/bin/python src/main.py
+```json
+{
+  "website_dir": "../web/public",
+  "staging_dir": "../web/.staging",
+  "template_path": "templates/index.html",
+  "timezone": "Europe/Bratislava",
+  "retry_interval": 5,
+  "name_day_api": {
+    "url": "https://nameday.abalin.net/api/V2/date",
+    "country": "sk",
+    "timeout": 5
+  }
+}
 ```
 
-Use `--config /path/to/settings.json` to select another configuration file.
-Stop with **Ctrl+C**.
+Paths are relative to each component's root, regardless of the current working
+directory or config file location. Absolute paths also work. FIM stores its
+database at `fim/data/fim.db` and logs at `fim/logs/fim.log`. Publisher reads
+`publisher/templates/index.html`. Both programs receive immutable typed settings.
+Intervals and timeouts are positive seconds. The database, logs, templates, and
+staging directory stay outside `web/public`. Publisher creates its staging
+directory when needed.
 
-Serve the website in another terminal:
+## Run without Docker
+
+Generate the initial page before establishing the first trusted baseline:
 
 ```bash
-.venv/bin/python -m http.server 8000 --bind 127.0.0.1 --directory web
+.venv/bin/python publisher/src/main.py --once
 ```
 
-Open http://127.0.0.1:8000. Refresh the browser to see updated content.
-On a web server, configure its document root to use the monitored directory.
-The monitor needs permission to read website files, replace `index.html`, and
-write its database and log.
+Start FIM:
+
+```bash
+.venv/bin/python fim/src/main.py
+```
+
+Run Publisher in another terminal for startup updates, midnight updates, and retries:
+
+```bash
+.venv/bin/python publisher/src/main.py
+```
+
+Serve only the public directory in another terminal:
+
+```bash
+.venv/bin/python -m http.server 8000 --bind 127.0.0.1 --directory web/public
+```
+
+Open http://127.0.0.1:8000. Refresh the browser to see changed content.
+Both programs accept `--config /path/to/settings.json` and stop with **Ctrl+C**.
+An existing SQLite baseline is always retained.
 
 ## Monitoring behavior
 
-- On the first run, the program tries to generate `index.html`, then saves the
-  website's hashes as the baseline. If the name-day API is unavailable, it uses
-  the existing website files. Initial files are assumed trusted.
-- Later runs load the existing baseline and check files immediately.
-  The baseline is never automatically overwritten.
-- Every scan detects added, modified, and deleted files, including subdirectories.
-  Renaming a file appears as a deletion and an addition.
-- Unreadable files, symlinks, and special files produce an `unverifiable` alert.
-  Other readable files are still checked. Temporary errors are retried.
-- Successful alerts are deduplicated in memory using the path, change type,
-  and hash. A new hash triggers another alert. Returning to the baseline clears
-  that file's alert state. Restarting can resend unresolved alerts.
-- Failed emails are logged and retried on the next scan.
-- Logs go to the terminal and the configured file, including timestamps and
-  timezone offsets. The file is appended across runs.
+- First startup saves hashes of the current public files. Initial content is
+  assumed trusted. Later startups load that baseline and scan immediately.
+- Scans detect added, modified, deleted, and unverifiable files, including
+  subdirectories. Renames appear as a deletion and an addition.
+- Successful alerts are deduplicated in memory by path, change type, and hash.
+  Returning to the baseline clears that path's state. Restarting can resend
+  unresolved alerts. Failed emails are retried on the next scan.
+- Logs append to the configured file and also appear in the terminal.
+- FIM needs website read access and database/log write access. Publisher needs
+  write access to the public and staging directories and read access to its template.
+- Publisher changes still produce integrity alerts. It never approves changes
+  or modifies the baseline.
 
-Polling can miss changes that are reverted between scans. Scanning and SMTP
-delivery take time, so the interval is a pause between scans, not a strict
-detection deadline.
+Polling can miss changes reverted between scans. Files replaced while FIM is
+offline cannot always be reconstructed later. Scanning and SMTP delivery take
+time, so the configured interval is a pause between scans.
 
-Existing databases from the earlier SQLAlchemy implementation remain compatible.
-Old notification records are retained but ignored. To establish a new trusted
-baseline, stop the monitor, review the website, and move the old database aside.
+Existing baseline tables remain compatible. Relative keys such as `index.html`
+and `style.css` stay the same after moving files into `web/public`. To establish
+a new baseline, stop FIM, review the site, and deliberately move its database aside.
 
-## Daily page update
+## Publisher behavior
 
-The program owns `index.html`: it fetches the Slovak name day from the
-[Abalin Nameday API](https://nameday.abalin.net/docs/api) and generates the page
-on startup and at local midnight while running. The API URL, country code, and
-timeout come from configuration. The endpoint must accept `day` and `month`
-parameters and return the Abalin response format. The configured country selects
-the result from `data`, for example `data.sk`. Existing URL query parameters are
-preserved. No API key or extra Python package is required.
+Publisher uses the [Abalin Nameday API](https://nameday.abalin.net/docs/api).
+The endpoint accepts `day` and `month` and returns the configured country under
+`data`, for example `data.sk`. No API key or extra Python dependency is required.
 
-A successful update is performed once per local date. The default API timeout
-is five seconds. If the API fails or returns invalid data, the error is logged, the
-existing page stays unchanged, and the next scan retries. File monitoring
-continues during an API outage. There is no bundled calendar or offline fallback.
+A successful lookup and publication runs once per local date, then Publisher
+sleeps until midnight in the configured timezone. API failures produce today's
+date and a temporary-unavailable message. Publisher retries after `retry_interval`;
+recovery restores the name. Repeated identical pages are not rewritten.
+`--once` publishes one page and exits, including a valid fallback page on API failure.
+A filesystem/template failure makes a one-shot run exit unsuccessfully.
 
-The program wakes for midnight even when the scan interval would otherwise
-extend past it. Operating-system delays, scans, email delivery, or API requests
-can delay the update. An interrupted process catches up when restarted.
+Temporary files are written in `web/.staging`, then atomically moved into
+`web/public/index.html`. These directories must share a filesystem. FIM and
+Nginx see only `public/`, avoiding partial pages and temporary-file alerts.
 
-Edit `templates/index.html` to change the generated HTML, retaining the
-`$name_day` and `$current_date` placeholders. API text is escaped before rendering.
-Use `web/style.css` for appearance. Direct edits to the generated `web/index.html`
-are replaced by the next generated page. An empty name displays "No name day".
+Edit `publisher/templates/index.html`, retaining `$name_day`, `$current_date`, and
+`$status_hidden`. API text is escaped before rendering. Use
+`web/public/style.css` for styling. Direct edits to generated `index.html`
+are replaced by the next publication. OS scheduling and API requests can still
+delay publication, but SMTP and FIM scans no longer block it.
 
-Daily updates are checked against the fixed baseline and can produce
-`modified` alerts. They do not automatically approve any website changes.
+## Docker deployment
+
+Requires Docker Engine and Compose supporting named-volume subpath mounts.
+Configure `.env` for the monitor, then run:
+
+```bash
+docker compose up -d --build
+```
+
+The three long-running services use persistent storage:
+
+- `publisher` has write access to the website volume and read-only config/template
+  mounts. It receives no SMTP credentials or baseline volume.
+- `monitor` mounts only the public subdirectory, read-only. Its database and log
+  volumes remain writable.
+- `web` serves the same public subdirectory through Nginx, read-only.
+
+Each component has its own Dockerfile and build context. Build them separately:
+
+```bash
+docker build -t file-integrity-monitor:local ./fim
+docker build -t file-integrity-publisher:local ./publisher
+docker build -t file-integrity-web:local ./web
+```
+
+Both Python images run as non-root users. Secrets, local databases, logs, and
+staging files are excluded from their build contexts. The web image includes
+the public assets for Nginx and a seed tree at `/opt/website` with `public/` and
+`.staging/` owned by UID/GID 10001.
+
+Compose first runs `website-init` from the web image with `/bin/true`. Docker
+copies the seed into an empty website volume; nonempty volumes remain untouched.
+Publisher starts after initialization completes and mounts the full website
+volume with copying disabled. Compose then waits for Publisher's first completed
+page before starting FIM and Nginx. An API fallback page counts as ready. The
+readiness marker is kept in a temporary filesystem and recreated after Publisher
+restarts. Once running, FIM and Nginx continue if Publisher is stopped.
+
+Only `monitor` receives `.env`, including SMTP credentials. Its public files are
+mounted at `/app/web/public`, while its writable database and log volumes are at
+`/app/fim/data` and `/app/fim/logs`. Publisher has read-only config and template
+mounts and writes the shared website at `/app/web`. Nginx mounts only `public/`
+at `/usr/share/nginx/html`, read-only.
+
+Open http://127.0.0.1:8000. Set `WEB_BIND_ADDRESS` and `WEB_PORT` in `.env` to
+change the published address and port. Set the address to `0.0.0.0` for access
+from other machines.
+
+```bash
+docker compose logs -f monitor publisher
+docker compose cp web/public/style.css publisher:/app/web/public/style.css
+docker compose down
+```
+
+The copy command publishes a changed stylesheet; FIM detects it. Website, baseline,
+and log volumes survive container recreation and `docker compose down`.
+Rebuilding images does not overwrite an existing website volume. The volume keys
+remain `website`, `baseline`, and `logs`. The three long-running services use
+`restart: unless-stopped`; `website-init` exits after initialization. Both Python
+programs handle SIGINT for clean shutdown.
+
+### Upgrading the earlier flat website volume
+
+The previous Docker layout stored `index.html` and `style.css` directly in the
+website volume. Stop that deployment and build the new images first:
+
+```bash
+docker compose down
+docker compose build
+```
+
+For an existing flat volume, move its files into `public/` before starting the
+new services. This command refuses to overwrite files and leaves the baseline
+volume untouched:
+
+```bash
+docker compose run --rm --no-deps -T publisher python - <<'PY'
+from pathlib import Path
+
+root = Path("/app/web")
+public = root / "public"
+public.mkdir(exist_ok=True)
+files = [path for path in root.iterdir() if path.name not in {"public", ".staging"}]
+
+if any((public / path.name).exists() for path in files):
+    raise SystemExit("Refusing to overwrite existing public files.")
+
+for path in files:
+    path.rename(public / path.name)
+PY
+
+docker compose up -d
+```
+
+This migration is unnecessary for fresh Docker volumes. Local website files have
+already moved to `web/public`. The existing local database and logs have moved to
+`fim/data` and `fim/logs`; database contents and relative baseline keys are unchanged.
 
 ## Code layout
 
-The application uses one Python package with relative imports and modules grouped
-by responsibility. The existing launch command uses a small compatibility wrapper:
-
 ```text
-config/config.json       # deployment settings
-templates/index.html     # source HTML template
-src/
-  main.py                # launch wrapper
-  fim/
-    __init__.py
-    __main__.py          # CLI, logging, dependency wiring, cleanup
-    config.py            # typed configuration and startup validation
-    app.py               # polling loop and daily update coordination
-    monitor.py           # comparisons, ChangeType enum, alert suppression
-    hashing.py           # SHA-256 hashing and file collection
-    storage.py           # SQLite baseline storage
-    notifications.py     # SMTP delivery and alert logging
-    daily_update.py      # API lookup, template rendering, midnight timing
+compose.yaml                 # shared deployment
+.env.example                 # root SMTP and web binding settings
+fim/
+  Dockerfile
+  requirements.txt           # FIM dependencies
+  config/config.json         # FIM settings
+  data/                      # local SQLite baseline, ignored by Git
+  logs/                      # local FIM logs, ignored by Git
+  src/
+    main.py                  # FIM entry point
+    fim/
+      __main__.py            # CLI, logging, resource lifecycle
+      config.py              # FIM and SMTP settings
+      app.py                 # scan loop and baseline initialization
+      monitor.py             # comparison and ChangeType enum
+      hashing.py             # SHA-256 snapshots
+      storage.py             # SQLite baseline storage
+      notifications.py       # SMTP alerts
+publisher/
+  Dockerfile
+  config/config.json         # Publisher settings
+  templates/index.html       # source HTML
+  src/
+    main.py                  # Publisher entry point
+    publisher/
+      __main__.py            # independent CLI
+      config.py              # publishing settings
+      app.py                 # startup, midnight schedule, retries
+      page.py                # API lookup and atomic page generation
+web/
+  Dockerfile                 # Nginx image and shared-volume seed
+  public/                    # published and monitored files
+  .staging/                  # temporary files, ignored by Git
 ```
-
-Deployment choices belong in configuration. The four integrity change types use
-`ChangeType`; fixed implementation values such as the hash buffer size use local
-named constants. SQL schema names and HTTP protocol fields stay with their code.
-The source layout keeps the original project-relative database and log locations.
-
-## Verification
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-Tests use temporary files and databases. Name-day API requests and SMTP delivery
-are mocked; tests need no internet connection and send no real emails.

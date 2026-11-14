@@ -1,0 +1,7 @@
+{
+  "website_dir": "../web/public",
+  "database_path": "data/fim.db",
+  "log_file": "logs/fim.log",
+  "scan_interval": 5,
+  "smtp_timeout": 10
+}

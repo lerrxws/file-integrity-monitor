@@ -3,18 +3,9 @@ import json
 import math
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
-from zoneinfo import ZoneInfo
 
 
 DEFAULT_SMTP_PORT = 587
-
-
-@dataclass(frozen=True)
-class NameDayApiConfig:
-    url: str
-    country: str
-    timeout: float
 
 
 @dataclass(frozen=True)
@@ -22,10 +13,7 @@ class AppConfig:
     website_dir: Path
     database_path: Path
     log_file: Path
-    template_path: Path
     scan_interval: float
-    timezone: ZoneInfo
-    name_day_api: NameDayApiConfig
     smtp_timeout: float
 
 
@@ -58,54 +46,24 @@ def load_config(path: Path, project_dir: Path) -> AppConfig:
 
     paths = {}
 
-    for key in ("website_dir", "database_path", "log_file", "template_path"):
+    for key in ("website_dir", "database_path", "log_file"):
         if not isinstance(settings[key], str) or not settings[key].strip():
             raise ValueError(f"{key} must be a nonempty path.")
 
-        paths[key] = (project_dir / settings[key]).absolute()
+        paths[key] = Path(os.path.abspath(project_dir / settings[key]))
 
     website_dir = paths["website_dir"]
 
     if website_dir.is_symlink() or not website_dir.is_dir():
         raise ValueError("website_dir must be an existing directory, not a symlink.")
 
-    for key in ("database_path", "log_file", "template_path"):
+    for key in ("database_path", "log_file"):
         if paths[key].resolve().is_relative_to(website_dir.resolve()):
             raise ValueError(f"{key} must be outside website_dir.")
-
-    if not paths["template_path"].is_file():
-        raise ValueError("template_path must point to an existing HTML template.")
-
-    api = settings["name_day_api"]
-    url = api["url"]
-
-    if not isinstance(url, str) or not url.strip():
-        raise ValueError("name_day_api.url must be a nonempty HTTP(S) URL.")
-
-    parsed_url = urlsplit(url)
-
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc or parsed_url.fragment:
-        raise ValueError("name_day_api.url must be an HTTP(S) URL without a fragment.")
-
-    country = api["country"]
-
-    if (
-        not isinstance(country, str)
-        or len(country) != 2
-        or not country.isascii()
-        or not country.isalpha()
-    ):
-        raise ValueError("name_day_api.country must be a two-letter country code.")
 
     return AppConfig(
         **paths,
         scan_interval=_positive_number(settings["scan_interval"], "scan_interval"),
-        timezone=ZoneInfo(settings["timezone"]),
-        name_day_api=NameDayApiConfig(
-            url=url,
-            country=country.lower(),
-            timeout=_positive_number(api["timeout"], "name_day_api.timeout"),
-        ),
         smtp_timeout=_positive_number(settings["smtp_timeout"], "smtp_timeout"),
     )
 

@@ -1,0 +1,76 @@
+services:
+  website-init:
+    build: ./web
+    image: file-integrity-web:local
+    entrypoint: ["/bin/true"]
+    restart: "no"
+    volumes:
+      - website:/opt/website
+
+  publisher:
+    build: ./publisher
+    image: file-integrity-publisher:local
+    command: ["python", "src/main.py", "--ready-file", "/tmp/publisher-ready"]
+    restart: unless-stopped
+    depends_on:
+      website-init:
+        condition: service_completed_successfully
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/publisher-ready"]
+      interval: 2s
+      timeout: 1s
+      start_period: 10s
+      retries: 10
+    volumes:
+      - type: volume
+        source: website
+        target: /app/web
+        volume:
+          nocopy: true
+      - ./publisher/config/config.json:/app/publisher/config/config.json:ro
+      - ./publisher/templates:/app/publisher/templates:ro
+
+  monitor:
+    build: ./fim
+    image: file-integrity-monitor:local
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      publisher:
+        condition: service_healthy
+    volumes:
+      - type: volume
+        source: website
+        target: /app/web/public
+        read_only: true
+        volume:
+          nocopy: true
+          subpath: public
+      - baseline:/app/fim/data
+      - logs:/app/fim/logs
+      - ./fim/config/config.json:/app/fim/config/config.json:ro
+
+  web:
+    build: ./web
+    image: file-integrity-web:local
+    restart: unless-stopped
+    depends_on:
+      publisher:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8000}:80"
+    volumes:
+      - type: volume
+        source: website
+        target: /usr/share/nginx/html
+        read_only: true
+        volume:
+          nocopy: true
+          subpath: public
+
+volumes:
+  website:
+  baseline:
+  logs:

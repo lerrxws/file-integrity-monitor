@@ -6,9 +6,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
-/data/*
-!/data/.gitkeep
-/logs/*
-!/logs/.gitkeep
+/fim/data/*
+!/fim/data/.gitkeep
+/fim/logs/*
+!/fim/logs/.gitkeep
 *.log
+/web/.staging/
 .DS_Store
