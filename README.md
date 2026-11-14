@@ -64,7 +64,34 @@ All selected recipients receive a new alert when the file content changes again.
 
 The scanner returns file differences without handling email or recipients.
 The notifier owns the selected group's delivery state, retries, and recovery;
-the application loop passes each scan result to it.
+the application loop assesses differences through a change policy before passing
+incidents to it.
+
+## Change policies
+
+`fim/src/fim/policy.py` defines the authorization boundary:
+
+- `ChangePolicy` is a `Protocol` with `assess(path, difference)`.
+- `ChangeAssessment` is an immutable result containing `decision` and `reason`.
+- `ChangeDecision` contains `APPROVED` and `INCIDENT`.
+- `ReportAllChangesPolicy` is wired into the CLI and keeps every difference
+  reportable because trusted approval evidence is not configured yet.
+
+Policies classify observed paths, operations, and hashes. They do not send email
+or write the database. The application records approved versions and logs the
+approval reason; the notifier handles incident delivery and retries.
+
+Approved versions are stored separately in SQLite's `approved_versions` table.
+The original `baselines` rows stay unchanged. Only the approved path becomes a
+new expected state, so a later rollback to the original content is detected.
+Approved deletions also persist without losing the original baseline's initialized
+status. Existing databases receive the additional table at startup.
+
+Unverifiable paths always remain incidents. Policy failures or failure to store
+an approval leave the previous expected state intact and keep the change reportable.
+Publisher changes continue to alert with the default policy. `PublisherChangePolicy`
+and `AuthorizedUserChangePolicy` will be added when their trusted evidence
+mechanisms are defined; there is no automatic approval based on time or file ownership.
 
 Publisher uses `publisher/config/config.json`:
 
@@ -124,18 +151,19 @@ An existing SQLite baseline is always retained.
 ## Monitoring behavior
 
 - First startup saves hashes of the current public files. Initial content is
-  assumed trusted. Later startups load that baseline and scan immediately.
+  assumed trusted. Later startups load the baseline plus approved versions and
+  scan immediately against that expected state.
 - Scans detect added, modified, deleted, and unverifiable files, including
   subdirectories. Renames appear as a deletion and an addition.
 - Successful alerts are deduplicated in memory by path, change type, hash, and
-  recipient. Returning to the baseline clears that path's state for everyone.
+  recipient. Returning to the expected state clears that path's state for everyone.
   Restarting can resend unresolved alerts. Failed recipients are retried on the
   next scan while other group members continue to receive their alerts.
 - Logs append to the configured file and also appear in the terminal.
 - FIM needs website read access and database/log write access. Publisher needs
   write access to the public and staging directories and read access to its template.
-- Publisher changes still produce integrity alerts. It never approves changes
-  or modifies the baseline.
+- Publisher changes still produce integrity alerts with the current policy.
+  Publisher never modifies the baseline or the approved-version records.
 
 Polling can miss changes reverted between scans. Files replaced while FIM is
 offline cannot always be reconstructed later. Scanning and SMTP delivery take
@@ -285,8 +313,9 @@ fim/
       config.py              # FIM and SMTP settings
       app.py                 # scan loop and baseline initialization
       monitor.py             # file differences and ChangeType enum
+      policy.py              # assessment contract and default incident policy
       hashing.py             # SHA-256 snapshots
-      storage.py             # SQLite baseline storage
+      storage.py             # original baseline and approved expected versions
       notifications.py       # recipient delivery state, retries, and SMTP alerts
 publisher/
   Dockerfile
@@ -305,7 +334,7 @@ web/
   .staging/                  # temporary files, ignored by Git
 ```
 
-Run the monitoring and notification group checks with:
+Run the policy, storage, and notification integration checks with:
 
 ```bash
 .venv/bin/python -m unittest discover -s fim/tests -v

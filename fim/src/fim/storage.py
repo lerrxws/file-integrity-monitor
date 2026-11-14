@@ -13,6 +13,10 @@ def initialize_database(path: str | Path) -> sqlite3.Connection:
                 "CREATE TABLE IF NOT EXISTS baselines "
                 "(path TEXT PRIMARY KEY NOT NULL, sha256 TEXT NOT NULL)"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS approved_versions "
+                "(path TEXT PRIMARY KEY NOT NULL, sha256 TEXT)"
+            )
     except BaseException:
         connection.close()
         raise
@@ -22,6 +26,28 @@ def initialize_database(path: str | Path) -> sqlite3.Connection:
 
 def get_baseline(connection: sqlite3.Connection) -> dict[str, str]:
     return dict(connection.execute("SELECT path, sha256 FROM baselines"))
+
+
+def get_expected_hashes(connection: sqlite3.Connection) -> dict[str, str]:
+    hashes = get_baseline(connection)
+
+    for path, sha256 in connection.execute("SELECT path, sha256 FROM approved_versions"):
+        if sha256 is None:
+            hashes.pop(path, None)
+        else:
+            hashes[path] = sha256
+
+    return hashes
+
+
+def save_approved_version(connection: sqlite3.Connection, path: str, sha256: str | None) -> None:
+    """Record one approved state; a null hash records approved absence."""
+    with connection:
+        connection.execute(
+            "INSERT INTO approved_versions (path, sha256) VALUES (?, ?) "
+            "ON CONFLICT(path) DO UPDATE SET sha256 = excluded.sha256",
+            (path, sha256),
+        )
 
 
 def save_baseline(connection: sqlite3.Connection, hashes: dict[str, str]) -> None:
