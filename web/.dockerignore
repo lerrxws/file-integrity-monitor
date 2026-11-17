@@ -1,5 +1,3 @@
-.staging/
-.publisher/
 .env
 .env.*
 .DS_Store

@@ -11,6 +11,4 @@ __pycache__/
 /fim/logs/*
 !/fim/logs/.gitkeep
 *.log
-/web/.staging/
-/web/.publisher/
 .DS_Store

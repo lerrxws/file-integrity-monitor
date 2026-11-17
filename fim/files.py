@@ -21,23 +21,10 @@ def open_regular_file(path: Path) -> Iterator[BinaryIO]:
         os.close(descriptor)
 
 
-def read_json_file(path: Path) -> Any:
-    with path.open(encoding="utf-8") as file:
+def read_json_file(path: Path, *, regular_only: bool = False) -> Any:
+    reader = open_regular_file(path) if regular_only else path.open(encoding="utf-8")
+
+    with reader as file:
         return json.load(file)
 
 
-def read_text_file(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def read_existing_bytes(path: Path) -> bytes | None:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        return None
-
-    if not stat.S_ISREG(metadata.st_mode):
-        raise ValueError(f"Expected a regular file, not a symlink or special file: {path}")
-
-    with open_regular_file(path) as file:
-        return file.read()

@@ -4,12 +4,8 @@
   "log_file": "logs/fim.log",
   "scan_interval": 5,
   "smtp_timeout": 10,
-  "scan_lock_path": "../web/.publisher/manifest.lock",
-  "incident_rule": {
-    "type": "publisher_aware",
-    "paths": ["index.html"],
-    "manifest_path": "../web/.publisher/manifest.json"
-  },
+  "template_path": "../web/templates/index.html",
+  "timezone": "Europe/Bratislava",
   "notifications": {
     "group": "web_admin",
     "groups": {
