@@ -3,15 +3,13 @@ import logging
 from pathlib import Path
 import sqlite3
 
-from dotenv import load_dotenv
-
-from .app import run
+from .monitor import run
 from .config import load_config, load_smtp_settings
 from .notifications import Notifier
-from .storage import initialize_database
+from .storage import open_database
 
 
-PROJECT_DIR = Path(__file__).resolve().parents[2]
+PROJECT_DIR = Path(__file__).resolve().parent
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 
@@ -37,6 +35,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Monitor website file integrity.")
     parser.add_argument("--config", type=Path, default=PROJECT_DIR / "config" / "config.json")
     args = parser.parse_args()
+    from dotenv import load_dotenv
+
     connection = None
 
     try:
@@ -47,7 +47,7 @@ def main() -> None:
         smtp = load_smtp_settings(settings.smtp_timeout)
         notifier = Notifier(settings.notifications, smtp)
 
-        connection = initialize_database(settings.database_path)
+        connection = open_database(settings.database_path)
 
         run(settings, connection, notifier.notify)
 
