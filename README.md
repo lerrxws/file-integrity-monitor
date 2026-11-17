@@ -20,12 +20,12 @@ Set SMTP credentials in `.env` and recipient addresses in
 
 ## Prepare hashes
 
-Create a reviewed `web/namedays.json` mapping `MM-DD` keys to name strings,
-for example `{"01-01": "Name", "01-02": "Another name"}`. Include every date in
-the requested year, including `02-29` for leap years.
+`web/namedays/2026/namedays.json` contains all 366 dates from the
+[Slovak official calendar](https://www.culture.gov.sk/storage/2020/03/Oficialne-kalendarium_2025.pdf).
+Names use `MM-DD` keys, comma-separated names, and `No name day` for unassigned dates.
 
 ```bash
-.venv/bin/python tools/seed_expected.py --calendar web/namedays.json --year 2026
+.venv/bin/python tools/seed_expected.py --calendar web/namedays/2026/namedays.json --year 2026
 ```
 
 The script stores date-specific page hashes from `web/templates/index.html` and
@@ -47,12 +47,4 @@ Start the monitor and web server in separate terminals:
 .venv/bin/python -m http.server 8000 --bind 127.0.0.1 --directory web/public
 ```
 
-Or, after preparing the database:
-
-```bash
-docker compose up --build -d
-```
-
-Open http://127.0.0.1:8000. Logs are in `fim/logs/fim.log` locally or
-`docker compose logs monitor`.
-Docker bind-mounted files must be readable by container UID `10001`.
+Open http://127.0.0.1:8000. Logs are in `fim/logs/fim.log`.
